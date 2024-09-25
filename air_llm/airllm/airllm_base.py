@@ -6,7 +6,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import torch
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AutoModel, GenerationMixin, LlamaForCausalLM, GenerationConfig
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AutoModel, GenerationMixin, LlamaForCausalLM, \
+    GenerationConfig, PretrainedConfig
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from accelerate import init_empty_weights
 
@@ -56,7 +57,7 @@ class AirLLMBaseModel(GenerationMixin):
 
     def __init__(self, model_local_path_or_repo_id, device="cuda:0", dtype=torch.float16, max_seq_len=512,
                  layer_shards_saving_path=None, profiling_mode=False, compression=None,
-                 hf_token=None, prefetching=True, delete_original=False):
+                 hf_token=None, prefetching=True, delete_original=False, config: PretrainedConfig = None):
         """
         Sharded version of LlamaForCausalLM : the model is splitted into layer shards to reduce GPU memory usage.
         During the forward pass, the inputs are processed layer by layer, and the GPU memory is freed after each layer.
@@ -80,6 +81,8 @@ class AirLLMBaseModel(GenerationMixin):
             setting to '4bit' or '8bit' to enable compression from 16 bits to 4 bits/8 bits which speeed up 4x or 2x inference time with a tiny accuracy loss.
         hf_token: str, optional
             huggingface api token could be provided, by default None
+        config: PreTrainConfig, optional
+            An instance of the configuration associated to the model.
         """
 
 
@@ -117,10 +120,13 @@ class AirLLMBaseModel(GenerationMixin):
         self.dtype = self.running_dtype
 
         # Create model
-        if hf_token is not None:
-            self.config = AutoConfig.from_pretrained(self.model_local_path, token=hf_token, trust_remote_code=True)
+        if config is not None:
+            self.config = config
         else:
-            self.config = AutoConfig.from_pretrained(self.model_local_path, trust_remote_code=True)
+            if hf_token is not None:
+                self.config = AutoConfig.from_pretrained(self.model_local_path, token=hf_token, trust_remote_code=True)
+            else:
+                self.config = AutoConfig.from_pretrained(self.model_local_path, trust_remote_code=True)
 
         self.generation_config = self.get_generation_config()
         #print(f"using generation_config: {self.generation_config}")
